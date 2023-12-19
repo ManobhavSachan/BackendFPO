@@ -1,4 +1,4 @@
-const { MongoClient } = require('mongodb');
+const { MongoClient, ServerApiVersion } = require('mongodb');
 const express = require('express');
 const cors = require('cors'); // Import the cors middleware
 require('dotenv').config();
@@ -14,31 +14,61 @@ app.use(cors());
 
 // Connect to MongoDB and start the server
 async function startServer() {
-  // ... (unchanged code)
+  try {
+    await client.connect();
+    await client.db("admin").command({ ping: 1 });
+    console.log("Pinged your deployment. You successfully connected to MongoDB!");
 
-  // Define routes
-  app.get('/api/documents', async (req, res) => {
-    const documents = await collection.find().toArray();
-    res.json(documents);
-  });
+    const db = client.db('SIH');
+    const collection = db.collection('FPO_StateWise');
 
-  app.get('/api/distinct-states', async (req, res) => {
-    const distinctStates = await collection.distinct('State Name');
-    res.json(distinctStates);
-  });
+    // Define routes
+    app.get('/api/documents', async (req, res) => {
+      const documents = await collection.find().toArray();
+      res.json(documents);
+    });
 
-  app.post('/api/distinct-district', express.json(), async (req, res) => {
-    // ... (unchanged code)
-  });
+    app.get('/api/distinct-states', async (req, res) => {
+      const distinctStates = await collection.distinct('State Name');
+      res.json(distinctStates);
+    });
 
-  app.post('/api/fpos', express.json(), async (req, res) => {
-    // ... (unchanged code)
-  });
+    app.post('/api/distinct-district', express.json(), async (req, res) => {
+      const state = req.body.state;
 
-  // Start the server
-  app.listen(port, () => {
-    console.log(`Server is running on http://localhost:${port}`);
-  });
+      try {
+        const distinctData = await collection.distinct('District', { "State Name": state });
+        res.json(distinctData);
+      } catch (error) {
+        console.error('Error retrieving distinct data:', error);
+        res.status(500).send('Internal Server Error');
+      }
+    });
+
+    app.post('/api/fpos', express.json(), async (req, res) => {
+      const state = req.body.state;
+      const district = req.body.district;
+
+      try {
+        const fposData = await collection.find({ "State Name": state, "District": district }).toArray();
+        res.json(fposData);
+      } catch (error) {
+        console.error('Error retrieving FPOs data:', error);
+        res.status(500).send('Internal Server Error');
+      }
+    });
+
+    // Start the server
+    app.listen(port, () => {
+      console.log(`Server is running on http://localhost:${port}`);
+    });
+  } finally {
+    process.on('SIGINT', async () => {
+      await client.close();
+      console.log('MongoDB connection closed');
+      process.exit();
+    });
+  }
 }
 
 startServer().catch(console.error);
